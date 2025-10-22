@@ -1,14 +1,24 @@
 from fastapi import (
     APIRouter,
     HTTPException,
-    status
+    status,
+    Request
 )
+import jwt
+from datetime import datetime, timezone, timedelta
 from typing import List
 from app.schemas.user import (
-    UserCreate, UserUpdate, UserResponse, UserLogin, 
-    UserWatchlistUpdate, UserPreferencesUpdate, Token
+    UserCreate,
+    UserUpdate,
+    UserResponse,
+    UserLogin, 
+    UserWatchlistUpdate,
+    UserPreferencesUpdate,
+    Token
 )
 from app.services.user_service import UserService
+from app.dependencies import SettingsDependency
+
 
 router = APIRouter()
 user_service = UserService()
@@ -28,26 +38,78 @@ async def register_user(user_data: UserCreate):
 
 
 @router.post("/login", response_model=Token)
-async def login_user(login_data: UserLogin):
+async def login_user(
+    login_data: UserLogin,
+    settings: SettingsDependency
+):
     """Login user and return token"""
-    user = await user_service.authenticate_user(login_data.email, login_data.password)
+    user: UserResponse = await user_service.authenticate_user(login_data.email, login_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    # For now, return a simple token. In production, use JWT tokens
-    access_token = f"token_{user.id}_{user.email}"
-    return {"access_token": access_token, "token_type": "bearer"}
+    expiration_time = datetime.now(timezone.utc) + timedelta(minutes=15)
+    # datetime.now(timezone.utc) + timedelta(seconds=settings.JWT_EXPIRATION_TIME)
+    payload = {
+        "user_id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "watchlist": user.watchlist,
+        "preferred_sectors": user.preferred_sectors,
+        "exp": expiration_time
+    }
+    print(payload)
+    access_token = jwt.encode(
+        payload,
+        settings.JWT_SECRET_KEY,
+        algorithm=settings.JWT_ALGORITHM,
+        # headers=headers
+    )
+    return Token(
+        access_token=access_token,
+        token_type="bearer",
+        expires_in=expiration_time
+    )
 
 
-@router.get("/", response_model=List[UserResponse])
-async def get_users(skip: int = 0, limit: int = 100):
-    """Get all users with pagination"""
-    users = await user_service.get_users(skip=skip, limit=limit)
-    return users
+@router.get("/me", response_model=UserResponse)
+async def get_user_profile(
+    request: Request,
+    settings: SettingsDependency
+):
+    """Get user profile"""
+    try:
+        user = request.state.user
+        
+        print('user', user)
+        db_user = await user_service.get_user(user['id'])
+        if not db_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        user_response = UserResponse(
+            id=user['id'],
+            email=user['email'],
+            name=user['name'],
+            watchlist=db_user.watchlist,
+            preferred_sectors=db_user.preferred_sectors,
+            is_active=db_user.is_active,
+            is_verified=db_user.is_verified,
+            is_admin=db_user.is_admin,
+            created_at=db_user.created_at,
+            updated_at=db_user.updated_at,
+            last_login=db_user.last_login,
+        )
+        return user_response
+    except Exception as e:
+        print('error', e)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized"
+        )
 
 
 @router.get("/{user_id}", response_model=UserResponse)

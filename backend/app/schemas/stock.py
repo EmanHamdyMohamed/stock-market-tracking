@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 
+
 class StockBase(BaseModel):
     """Base schema for Stock"""
     symbol: str
@@ -18,10 +19,12 @@ class StockBase(BaseModel):
     """Market capitalization"""
     sector: Optional[str]
     """Stock sector (e.g., Technology, Healthcare)"""
+    
 
 class StockCreate(StockBase):
     """Schema for creating Stock"""
     pass
+
 
 class StockUpdate(BaseModel):
     """Schema for updating Stock"""
@@ -33,9 +36,10 @@ class StockUpdate(BaseModel):
     market_cap: Optional[float]
     sector: Optional[str]
 
+
 class StockResponse(StockBase):
     """Schema for Stock response"""
-    id: int
+    id: str
     created_at: datetime
     updated_at: datetime
     

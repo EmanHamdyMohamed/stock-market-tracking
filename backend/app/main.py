@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.core.database import connect_to_mongo, close_mongo_connection
 from app.routers import stock, user
+from app.middleware.auth import authorize_token
 
 
 @asynccontextmanager
@@ -25,15 +26,16 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.middleware("http")(authorize_token)
 # Include routers
-app.include_router(stock.router, prefix="/api/v1", tags=["stocks"])
-app.include_router(user.router, prefix="/api/v1/users", tags=["users"])
+app.include_router(stock.router, prefix="/stocks", tags=["stocks"])
+app.include_router(user.router, prefix="/users", tags=["users"])
 
 
 @app.get("/")
